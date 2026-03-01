@@ -1,0 +1,2 @@
+# Local dev only — Modal container uses pip_install() from app.py image definition
+modal>=1.0.0

@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Video Transcriber</title>
+<style>
+  :root {
+    --bg: #0f0f11;
+    --surface: #1a1a1f;
+    --border: #2a2a30;
+    --text: #e4e4e7;
+    --muted: #8b8b94;
+    --accent: #6366f1;
+    --accent-hover: #818cf8;
+    --success: #22c55e;
+    --error: #ef4444;
+    --radius: 12px;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    padding: 40px 20px;
+  }
+  .container { max-width: 640px; width: 100%; }
+
+  h1 {
+    font-size: 1.8rem;
+    font-weight: 700;
+    margin-bottom: 4px;
+  }
+  .subtitle {
+    color: var(--muted);
+    font-size: 0.95rem;
+    margin-bottom: 32px;
+  }
+
+  /* ── Tabs ─────────────────────────────────── */
+  .tabs {
+    display: flex;
+    gap: 4px;
+    background: var(--surface);
+    border-radius: var(--radius);
+    padding: 4px;
+    margin-bottom: 24px;
+  }
+  .tab {
+    flex: 1;
+    padding: 10px;
+    text-align: center;
+    border: none;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--muted);
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .tab.active {
+    background: var(--accent);
+    color: #fff;
+  }
+
+  /* ── Panels ──────────────────────────────── */
+  .panel { display: none; }
+  .panel.active { display: block; }
+
+  /* ── Drop zone ───────────────────────────── */
+  .dropzone {
+    border: 2px dashed var(--border);
+    border-radius: var(--radius);
+    padding: 48px 24px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    margin-bottom: 16px;
+  }
+  .dropzone:hover, .dropzone.dragover {
+    border-color: var(--accent);
+    background: rgba(99,102,241,0.05);
+  }
+  .dropzone .icon { font-size: 2.5rem; margin-bottom: 12px; }
+  .dropzone .label { font-size: 0.95rem; color: var(--muted); }
+  .dropzone .filename {
+    margin-top: 10px;
+    font-weight: 600;
+    color: var(--accent-hover);
+    word-break: break-all;
+  }
+  .dropzone input[type=file] { display: none; }
+
+  /* ── Form elements ───────────────────────── */
+  .field { margin-bottom: 16px; }
+  .field label {
+    display: block;
+    font-size: 0.85rem;
+    color: var(--muted);
+    margin-bottom: 6px;
+  }
+  input[type=text], select {
+    width: 100%;
+    padding: 10px 14px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface);
+    color: var(--text);
+    font-size: 0.95rem;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  input[type=text]:focus, select:focus {
+    border-color: var(--accent);
+  }
+  select option { background: var(--surface); }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    padding: 12px 24px;
+    border: none;
+    border-radius: 8px;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .btn-primary {
+    background: var(--accent);
+    color: #fff;
+  }
+  .btn-primary:hover { background: var(--accent-hover); }
+  .btn-primary:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  .btn-success {
+    background: var(--success);
+    color: #fff;
+    margin-top: 12px;
+    text-decoration: none;
+  }
+  .btn-success:hover { filter: brightness(1.1); }
+
+  /* ── Progress ────────────────────────────── */
+  #progress-section {
+    display: none;
+    margin-top: 32px;
+    background: var(--surface);
+    border-radius: var(--radius);
+    padding: 24px;
+  }
+  .progress-header {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 12px;
+    font-size: 0.9rem;
+  }
+  .progress-bar-bg {
+    height: 8px;
+    background: var(--border);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .progress-bar-fill {
+    height: 100%;
+    width: 0%;
+    background: var(--accent);
+    border-radius: 4px;
+    transition: width 0.4s ease;
+  }
+  .progress-bar-fill.done { background: var(--success); }
+  .progress-bar-fill.err  { background: var(--error); }
+  .progress-message {
+    margin-top: 10px;
+    font-size: 0.85rem;
+    color: var(--muted);
+  }
+
+  /* ── Result ──────────────────────────────── */
+  #result-section { display: none; margin-top: 16px; }
+
+  /* ── Error ───────────────────────────────── */
+  .error-box {
+    display: none;
+    margin-top: 16px;
+    padding: 14px;
+    border-radius: 8px;
+    background: rgba(239,68,68,0.1);
+    color: var(--error);
+    font-size: 0.9rem;
+    word-break: break-word;
+  }
+
+  /* ── Info ─────────────────────────────────── */
+  .info {
+    margin-top: 24px;
+    padding: 14px;
+    border-radius: 8px;
+    background: var(--surface);
+    font-size: 0.8rem;
+    color: var(--muted);
+    line-height: 1.5;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>🎙️ Video Transcriber</h1>
+  <p class="subtitle">Whisper large-v3 · faster-whisper · Modal GPU</p>
+
+  <!-- Tabs -->
+  <div class="tabs">
+    <button class="tab active" data-tab="upload">📁 Загрузить файл</button>
+    <button class="tab" data-tab="youtube">▶️ YouTube</button>
+  </div>
+
+  <!-- Upload Panel -->
+  <div id="panel-upload" class="panel active">
+    <div class="dropzone" id="dropzone">
+      <div class="icon">📂</div>
+      <div class="label">Перетащите видео сюда или нажмите для выбора</div>
+      <div class="filename" id="file-name"></div>
+      <input type="file" id="file-input"
+             accept="video/*,audio/*,.mp4,.mkv,.avi,.mov,.webm,.mp3,.wav,.m4a,.ogg,.flac">
+    </div>
+    <div class="field">
+      <label for="lang-upload">Язык аудио</label>
+      <select id="lang-upload">
+        <option value="auto">Автоопределение</option>
+        <option value="ru">Русский</option>
+        <option value="en">English</option>
+        <option value="uk">Українська</option>
+        <option value="de">Deutsch</option>
+        <option value="fr">Français</option>
+        <option value="es">Español</option>
+        <option value="zh">中文</option>
+        <option value="ja">日本語</option>
+        <option value="ko">한국어</option>
+      </select>
+    </div>
+    <button class="btn btn-primary" id="btn-upload" disabled>Транскрибировать</button>
+  </div>
+
+  <!-- YouTube Panel -->
+  <div id="panel-youtube" class="panel">
+    <div class="field">
+      <label for="yt-url">Ссылка на YouTube</label>
+      <input type="text" id="yt-url" placeholder="https://www.youtube.com/watch?v=...">
+    </div>
+    <div class="field">
+      <label for="lang-yt">Язык аудио</label>
+      <select id="lang-yt">
+        <option value="auto">Автоопределение</option>
+        <option value="ru">Русский</option>
+        <option value="en">English</option>
+        <option value="uk">Українська</option>
+        <option value="de">Deutsch</option>
+        <option value="fr">Français</option>
+        <option value="es">Español</option>
+        <option value="zh">中文</option>
+        <option value="ja">日本語</option>
+        <option value="ko">한국어</option>
+      </select>
+    </div>
+    <button class="btn btn-primary" id="btn-youtube" disabled>Транскрибировать</button>
+  </div>
+
+  <!-- Error -->
+  <div class="error-box" id="error-box"></div>
+
+  <!-- Progress -->
+  <div id="progress-section">
+    <div class="progress-header">
+      <span id="progress-status">Загрузка…</span>
+      <span id="progress-pct">0%</span>
+    </div>
+    <div class="progress-bar-bg">
+      <div class="progress-bar-fill" id="progress-bar"></div>
+    </div>
+    <div class="progress-message" id="progress-msg"></div>
+  </div>
+
+  <!-- Result -->
+  <div id="result-section">
+    <a class="btn btn-success" id="download-btn" href="#" download>
+      ⬇️ Скачать транскрипцию (.md)
+    </a>
+  </div>
+
+  <div class="info">
+    <strong>Поддерживаемые форматы:</strong> MP4, MKV, AVI, MOV, WebM, MP3, WAV, M4A, OGG, FLAC<br>
+    <strong>Макс. размер:</strong> ~4 ГБ &nbsp;|&nbsp;
+    <strong>Длительность:</strong> до 5 часов &nbsp;|&nbsp;
+    <strong>GPU:</strong> NVIDIA T4
+  </div>
+</div>
+
+<script>
+/* State */
+const MAX_UPLOAD_BYTES = 4 * 1024 * 1024 * 1024;
+const MAX_UPLOAD_MB = Math.floor(MAX_UPLOAD_BYTES / 1048576);
+
+let selectedFile = null;
+let currentJobId = null;
+let evtSource = null;
+let isProcessing = false;
+
+/* DOM refs */
+const $ = id => document.getElementById(id);
+const dropzone = $('dropzone');
+const fileInput = $('file-input');
+const fileName = $('file-name');
+const btnUpload = $('btn-upload');
+const btnYoutube = $('btn-youtube');
+const ytUrl = $('yt-url');
+const errorBox = $('error-box');
+const progressSec = $('progress-section');
+const progressBar = $('progress-bar');
+const progressPct = $('progress-pct');
+const progressSt = $('progress-status');
+const progressMsg = $('progress-msg');
+const resultSec = $('result-section');
+const downloadBtn = $('download-btn');
+
+const STATUS_LABEL = {
+  queued: 'В очереди…',
+  uploading: 'Загрузка файла…',
+  downloading: 'Скачивание…',
+  processing: 'Транскрибация…',
+  completed: 'Готово',
+  error: 'Ошибка',
+};
+
+/* Tabs */
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    tab.classList.add('active');
+    $('panel-' + tab.dataset.tab).classList.add('active');
+  });
+});
+
+/* Drag and drop */
+dropzone.addEventListener('click', () => fileInput.click());
+dropzone.addEventListener('dragover', e => {
+  e.preventDefault();
+  dropzone.classList.add('dragover');
+});
+dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
+dropzone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropzone.classList.remove('dragover');
+  if (e.dataTransfer.files.length) pickFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener('change', () => {
+  if (fileInput.files.length) pickFile(fileInput.files[0]);
+});
+
+function pickFile(file) {
+  hideError();
+  if (file.size > MAX_UPLOAD_BYTES) {
+    selectedFile = null;
+    fileName.textContent = '';
+    showError(`Файл слишком большой. Лимит: ${MAX_UPLOAD_MB} МБ.`);
+    syncButtons();
+    return;
+  }
+
+  selectedFile = file;
+  fileName.textContent = `${file.name} (${(file.size / 1048576).toFixed(1)} МБ)`;
+  syncButtons();
+}
+
+/* YouTube URL validation */
+ytUrl.addEventListener('input', syncButtons);
+
+/* Upload */
+btnUpload.addEventListener('click', async () => {
+  if (!selectedFile || isProcessing) return;
+  beginJobUI('Загрузка файла…');
+
+  try {
+    const form = new FormData();
+    form.append('file', selectedFile);
+    form.append('language', $('lang-upload').value);
+
+    const resp = await fetch('/upload', { method: 'POST', body: form });
+    if (!resp.ok) throw new Error(await readError(resp));
+
+    const { job_id } = await resp.json();
+    currentJobId = job_id;
+    startStatusStream(job_id);
+  } catch (e) {
+    failJobUI(e.message || String(e));
+  }
+});
+
+/* YouTube */
+btnYoutube.addEventListener('click', async () => {
+  const url = ytUrl.value.trim();
+  if (!url || isProcessing) return;
+  beginJobUI('Отправка запроса…');
+
+  try {
+    const resp = await fetch('/youtube', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url, language: $('lang-yt').value }),
+    });
+    if (!resp.ok) throw new Error(await readError(resp));
+
+    const { job_id } = await resp.json();
+    currentJobId = job_id;
+    startStatusStream(job_id);
+  } catch (e) {
+    failJobUI(e.message || String(e));
+  }
+});
+
+/* SSE */
+function startStatusStream(jobId) {
+  if (evtSource) evtSource.close();
+  evtSource = new EventSource(`/status/${jobId}`);
+
+  evtSource.onmessage = (event) => {
+    const payload = JSON.parse(event.data);
+    const pct = Math.max(0, Math.min(100, Math.round((payload.progress || 0) * 100)));
+    const statusText = STATUS_LABEL[payload.status] || 'Обработка…';
+
+    updateProgress(statusText, payload.message || statusText, pct);
+
+    if (payload.status === 'completed') {
+      progressBar.classList.add('done');
+      progressSt.textContent = 'Готово';
+      finishJobUI(jobId);
+    }
+
+    if (payload.status === 'error') {
+      progressBar.classList.add('err');
+      progressSt.textContent = 'Ошибка';
+      failJobUI(payload.message || 'Неизвестная ошибка');
+    }
+  };
+
+  evtSource.onerror = () => {
+    if (!evtSource) return;
+    if (evtSource.readyState === EventSource.CLOSED && isProcessing) {
+      failJobUI('Соединение потеряно. Проверьте сеть и попробуйте снова.');
+    }
+  };
+}
+
+/* Helpers */
+async function readError(resp) {
+  const text = await resp.text();
+  if (!text) return `HTTP ${resp.status}`;
+  try {
+    const parsed = JSON.parse(text);
+    return parsed.error || text;
+  } catch {
+    return text;
+  }
+}
+
+function beginJobUI(initialMessage) {
+  hideError();
+  if (evtSource) {
+    evtSource.close();
+    evtSource = null;
+  }
+  isProcessing = true;
+  resultSec.style.display = 'none';
+  showProgress(initialMessage, 0);
+  syncButtons();
+}
+
+function finishJobUI(jobId) {
+  if (evtSource) {
+    evtSource.close();
+    evtSource = null;
+  }
+  isProcessing = false;
+  resultSec.style.display = 'block';
+  downloadBtn.href = `/result/${jobId}`;
+  syncButtons();
+}
+
+function failJobUI(message) {
+  if (evtSource) {
+    evtSource.close();
+    evtSource = null;
+  }
+  isProcessing = false;
+  showError(message);
+  syncButtons();
+}
+
+function showProgress(msg, pct) {
+  progressSec.style.display = 'block';
+  progressBar.className = 'progress-bar-fill';
+  updateProgress('Запуск…', msg, pct);
+}
+
+function updateProgress(statusLabel, msg, pct) {
+  progressSt.textContent = statusLabel;
+  progressMsg.textContent = msg || '';
+  progressPct.textContent = `${pct}%`;
+  progressBar.style.width = `${pct}%`;
+}
+
+function syncButtons() {
+  btnUpload.disabled = isProcessing || !selectedFile;
+  btnYoutube.disabled = isProcessing || !ytUrl.value.trim();
+}
+
+function showError(msg) {
+  errorBox.style.display = 'block';
+  errorBox.textContent = msg;
+}
+
+function hideError() {
+  errorBox.style.display = 'none';
+}
+
+window.addEventListener('beforeunload', () => {
+  if (evtSource) evtSource.close();
+});
+
+syncButtons();
+</script>
+</body>
+</html>
